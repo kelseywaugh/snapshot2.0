@@ -1597,7 +1597,9 @@ function pd(s) {
 }
 function fd(s, short) {
   if (!s) return '';
-  return pd(s).toLocaleDateString('en-US', short ? {month:'short',day:'numeric'} : {month:'short',day:'numeric'});
+  const d = pd(s);
+  if (!d) return '';
+  return d.toLocaleDateString('en-US', short ? {month:'short',day:'numeric'} : {month:'short',day:'numeric'});
 }
 function todayMidnight() {
   const t = new Date(); t.setHours(0,0,0,0); return t;
@@ -2152,6 +2154,10 @@ function handleCSV(e) {
         if (rowType === 'component') continue;
         if (!row.task && !row['gain_task']) continue;
         if (!row.due) continue;
+        // Skip rows with unparseable due dates (TBD, component names, etc.)
+        const dueRaw = row.due.trim();
+        if (!dueRaw || !dueRaw.includes('/') && !dueRaw.includes('-')) continue;
+        if (dueRaw.toUpperCase() === 'TBD') continue;
         const rawTask = row['gain_task'] || row.task;
         const vendor  = row.vendor || '';
         const translated = translateTask(rawTask, vendor);
