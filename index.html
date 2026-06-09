@@ -366,38 +366,36 @@ body {
 }
 .focus-tasks {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
   padding-bottom: 10px;
-  overflow-x: auto;
-  flex-wrap: nowrap;
 }
 .focus-tasks:empty { display: none; }
 .focus-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
+  gap: 8px;
+  padding: 7px 12px;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-left: 3px solid var(--c-red);
   border-radius: var(--radius-sm);
-  font-size: 11px;
-  white-space: nowrap;
+  font-size: 12px;
   cursor: pointer;
-  flex-shrink: 0;
   transition: border-color .1s;
 }
 .focus-chip:hover { border-color: var(--accent); }
 .focus-chip.today { border-left-color: var(--c-green); }
-.focus-chip.star { border-left-color: var(--c-yellow); }
-.focus-chip-name { font-weight: 500; color: var(--text); }
-.focus-chip-job  { color: var(--text3); font-size: 10px; }
+.focus-chip.star  { border-left-color: var(--c-yellow); }
+.focus-chip-name { font-weight: 500; color: var(--text); flex: 1; }
+.focus-chip-job  { color: var(--text3); font-size: 11px; white-space: nowrap; }
 .focus-chip-remove {
   color: var(--text3);
   font-size: 12px;
   cursor: pointer;
   padding: 0 2px;
   line-height: 1;
+  margin-left: 4px;
 }
 .focus-chip-remove:hover { color: var(--c-red); }
 
@@ -958,8 +956,30 @@ body {
 .gantt-day-head.today  { color: var(--c-green); font-weight: 700; }
 .gantt-day-head.weekend { opacity: .45; }
 
-.gantt-rows { display: flex; flex-direction: column; gap: 5px; position: relative; }
-.gantt-row  { position: relative; height: 44px; }
+.gantt-rows { display: flex; flex-direction: column; gap: 8px; position: relative; }
+.gantt-row  { position: relative; height: 52px; }
+.gantt-status-tab {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 16px;
+  padding: 0 7px;
+  border-radius: 4px 4px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  z-index: 3;
+  line-height: 1;
+}
+.gantt-status-tab.tab-behind-4 { background:#ffdee9; color:#c0392b; }
+.gantt-status-tab.tab-behind-3 { background:#ffdee9; color:#c0392b; }
+.gantt-status-tab.tab-behind-2 { background:#ffdee9; color:#c0392b; }
+.gantt-status-tab.tab-behind-1 { background:#fff2d9; color:#b8860b; }
+.gantt-status-tab.tab-ontrack  { background:#ddf2e8; color:#1a7f4b; }
+.gantt-status-tab.tab-ahead    { background:#dbeafe; color:#1d6fa5; }
 
 .gantt-today-line {
   position: absolute;
@@ -972,7 +992,7 @@ body {
 
 .gantt-bar {
   position: absolute;
-  top: 4px;
+  top: 16px;
   height: 36px;
   background: var(--surface);
   border: 1px solid var(--border2);
@@ -1013,13 +1033,7 @@ body {
 .gantt-bar-num  { font-family: var(--font-mono); font-size: 9px; color: var(--text3); display: block; }
 .gantt-bar-name { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.gantt-health {
-  font-size: 11px;
-  white-space: nowrap;
-  z-index: 2;
-  position: relative;
-  flex-shrink: 0;
-}
+/* gantt-health moved to status tab above bar */
 
 .gantt-ticks {
   position: absolute;
@@ -1611,16 +1625,20 @@ function renderDate() {
 
 // ── DEPT FILTER ──
 function isTaskVisible(task) {
-  const name = (task.task||'').toLowerCase();
-  let visibleInAnyDept = false;
+  const name = (task.task||'').toLowerCase().trim();
+  let matchedAnyDept = false;
   for (const [dk, dv] of Object.entries(depts)) {
-    if (!dv.on) continue;
-    if (dv.tasks.some(t => name.includes(t.toLowerCase()) || t.toLowerCase().includes(name.slice(0,12)))) {
-      visibleInAnyDept = true;
-      break;
+    const matched = dv.tasks.some(t => {
+      const tl = t.toLowerCase().trim();
+      return name === tl || name.startsWith(tl) || tl.startsWith(name);
+    });
+    if (matched) {
+      matchedAnyDept = true;
+      if (dv.on) return true;
     }
   }
-  return visibleInAnyDept;
+  // Unknown task type (not in any dept list) — show it
+  return !matchedAnyDept;
 }
 
 // ── NAVIGATION ──
@@ -1716,7 +1734,7 @@ function renderFocus() {
     const cls = s === 'today' ? 'today' : s === 'overdue' ? '' : 'star';
     return `<div class="focus-chip ${cls}" ondblclick="setView('byjob',document.querySelector('[data-view=byjob]'))">
       <span class="focus-chip-name">${task.task||''}</span>
-      <span class="focus-chip-job">${parseCampaign(task.campaign).num}</span>
+      <span class="focus-chip-job">${parseCampaign(task.campaign).num}${parseCampaign(task.campaign).name ? ' ' + parseCampaign(task.campaign).name : ''}</span>
       <span class="focus-chip-remove" onclick="event.stopPropagation();removeFocus('${task.id}')">✕</span>
     </div>`;
   }).join('');
@@ -1979,7 +1997,18 @@ function renderByMonth() {
     const amInit = j.am.includes('Molly') ? 'MD' : 'CE';
     const { num: numStr, name: nameStr } = parseCampaign(j.campaign);
 
+    // Status tab color class
+    let tabCls = 'tab-ontrack';
+    if      (behindTasks>=4)  tabCls='tab-behind-4';
+    else if (behindTasks===3) tabCls='tab-behind-3';
+    else if (behindTasks===2) tabCls='tab-behind-2';
+    else if (behindTasks===1) tabCls='tab-behind-1';
+    else if (aheadTasks>=1)   tabCls='tab-ahead';
+
     rowsHtml += `<div class="gantt-row">
+      <div class="gantt-status-tab ${tabCls}" style="left:${leftPct}%">
+        ${healthEmoji} ${healthLabel}
+      </div>
       <div class="gantt-bar ${extLeft?'ext-left':''} ${extRight?'ext-right':''}"
            style="left:${leftPct}%;right:${rightPct}%">
         <div class="am-avatar ${amCls}">${amInit}</div>
@@ -1987,7 +2016,6 @@ function renderByMonth() {
           <span class="gantt-bar-num">${numStr}</span>
           <span class="gantt-bar-name">${nameStr}</span>
         </div>
-        <div class="gantt-health">${healthEmoji} ${healthLabel}</div>
         ${extRight?'<span class="gantt-bar-arrow">→</span>':''}
         <div class="gantt-ticks">${ticksHtml}</div>
       </div>
