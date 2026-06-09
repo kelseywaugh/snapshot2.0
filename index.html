@@ -1512,6 +1512,20 @@ function translateTask(raw, vendor) {
   return raw;
 }
 
+// ── CAMPAIGN PARSE ──
+// Handles both "DC26063 // Visa Multi Offer" and "DC26063 Visa Multi Offer"
+function parseCampaign(str) {
+  if (!str) return { num: '', name: '' };
+  if (str.includes('//')) {
+    const parts = str.split('//');
+    return { num: parts[0].trim(), name: parts[1]?.trim() || '' };
+  }
+  // No // separator — split on first space after job number pattern
+  const m = str.match(/^(DC\d+)\s+(.+)$/i);
+  if (m) return { num: m[1].trim(), name: m[2].trim() };
+  return { num: str, name: '' };
+}
+
 // ── STATE ──
 let tasks = [], done = new Set(), depts = {}, docInfo = {name:'',version:'',uploaded:''};
 let focusPinned = new Set(), focusCollapsed = false;
@@ -1702,7 +1716,7 @@ function renderFocus() {
     const cls = s === 'today' ? 'today' : s === 'overdue' ? '' : 'star';
     return `<div class="focus-chip ${cls}" ondblclick="setView('byjob',document.querySelector('[data-view=byjob]'))">
       <span class="focus-chip-name">${task.task||''}</span>
-      <span class="focus-chip-job">${(task.campaign||'').split('//')[0]?.trim()}</span>
+      <span class="focus-chip-job">${parseCampaign(task.campaign).num}</span>
       <span class="focus-chip-remove" onclick="event.stopPropagation();removeFocus('${task.id}')">✕</span>
     </div>`;
   }).join('');
@@ -1800,8 +1814,7 @@ function renderByJob() {
     jTasks.forEach(t => { const s=getStatus(t); if(counts[s]!==undefined) counts[s]++; });
     const totalDone = jTasks.filter(t=>done.has(t.id)).length;
     const isComp = jTasks.every(t=>done.has(t.id));
-    const numStr = j.campaign.split('//')[0]?.trim() || j.campaign;
-    const nameStr = j.campaign.split('//')[1]?.trim() || '';
+    const { num: numStr, name: nameStr } = parseCampaign(j.campaign);
     const badgesHtml = [
       counts.overdue  ? `<span class="job-badge red">${counts.overdue} overdue</span>` : '',
       counts.today    ? `<span class="job-badge green">${counts.today} today</span>` : '',
@@ -1865,11 +1878,11 @@ function renderByWeek() {
       const isR3 = name === 'R3: Creative out';
       const fill = isPresentation ? 'fill-pink' : isR1 ? 'fill-orange' : '';
       const bold = (isR2||isR3) ? 'font-weight:700' : '';
-      const jobNum = (task.campaign||'').split('//')[0]?.trim();
-      const jobName = (task.campaign||'').split('//')[1]?.trim();
+      const jobNum = parseCampaign(task.campaign).num;
+      const jobName = parseCampaign(task.campaign).name;
       return `<div class="week-card ${s} ${fill} ${isDone?'done':''}">
         <div class="week-card-name" style="${bold}">${name}</div>
-        <div class="week-card-job">${jobNum} ${jobName?'// '+jobName:''}</div>
+        <div class="week-card-job">${jobNum}${jobName?' '+jobName:''}</div>
         <span class="week-card-type">${task.type||''}</span>
         <input type="checkbox" class="task-check" style="width:13px;height:13px;margin-top:4px" ${isDone?'checked':''} onchange="toggleDone('${task.id}')"/>
       </div>`;
@@ -1964,8 +1977,7 @@ function renderByMonth() {
 
     const amCls = j.am.includes('Molly') ? 'am-md' : 'am-ce';
     const amInit = j.am.includes('Molly') ? 'MD' : 'CE';
-    const numStr  = j.campaign.split('//')[0]?.trim() || j.campaign;
-    const nameStr = j.campaign.split('//')[1]?.trim() || '';
+    const { num: numStr, name: nameStr } = parseCampaign(j.campaign);
 
     rowsHtml += `<div class="gantt-row">
       <div class="gantt-bar ${extLeft?'ext-left':''} ${extRight?'ext-right':''}"
@@ -2115,11 +2127,15 @@ function handleCSV(e) {
         const rawTask = row['gain_task'] || row.task;
         const vendor  = row.vendor || '';
         const translated = translateTask(rawTask, vendor);
-        // Use campaign + full task name + due date for a truly unique ID (no truncation)
-        const id = 'csv_'+(row.campaign||'').replace(/\W/g,'')+'_'+(rawTask+row.due).replace(/\W/g,'');
+        // Build campaign from explicit campaign column OR job_num + job_name
+        const jobNum  = (row['job_num'] || row['job_number'] || '').trim();
+        const jobName = (row['job_name'] || '').trim();
+        const campaign = row.campaign || (jobNum && jobName ? `${jobNum} ${jobName}` : jobNum || jobName || '');
+        // Use campaign + full task name + due date for a truly unique ID
+        const id = 'csv_'+(campaign).replace(/\W/g,'')+'_'+(rawTask+row.due).replace(/\W/g,'');
         if (tasks.find(t=>t.id===id)) continue;
         newTasks.push({
-          id, campaign: row.campaign||'', task: translated,
+          id, campaign, task: translated,
           type: row.type||'Other', due: row.due, dueEnd: row['due_end']||row.dueend||null,
           am: row.am||'', vendor, c: row.client||'Delta Community CU', source:'report'
         });
